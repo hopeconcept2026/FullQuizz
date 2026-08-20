@@ -65,10 +65,16 @@ jobs:
           EOF
           fi
 
-          # Decode debug.keystore if base64 file is present and keystore is missing
-          if [ ! -f "debug.keystore" ] && [ -f "debug.keystore.base64" ]; then
-            echo "Decoding debug.keystore..."
-            base64 -d debug.keystore.base64 > debug.keystore || true
+          # Ensure release keystore exists or create a valid one with keytool
+          if [ ! -f "my-upload-key.jks" ] && [ ! -f "debug.keystore" ]; then
+            if [ -f "debug.keystore.base64" ]; then
+              base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
+            fi
+          fi
+
+          if [ ! -f "debug.keystore" ]; then
+            echo "Generating signing keystore for release build..."
+            keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=FullQuizz, OU=HopeConcept, O=HopeConcept, L=Paris, S=IDF, C=FR"
           fi
 
           # Ensure .env file exists for secrets-gradle-plugin
