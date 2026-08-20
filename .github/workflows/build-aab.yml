@@ -27,6 +27,53 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
+      - name: Prepare Configuration & Keystore
+        run: |
+          # Ensure google-services.json exists
+          if [ ! -f "app/google-services.json" ]; then
+            echo "Creating app/google-services.json..."
+            cat << 'EOF' > app/google-services.json
+          {
+            "project_info": {
+              "project_number": "495585350355",
+              "project_id": "fullquizz-app",
+              "storage_bucket": "fullquizz-app.firebasestorage.app"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:495585350355:android:5b5134d8bdaacce797ba26",
+                  "android_client_info": {
+                    "package_name": "com.hopeconcept.fullquizz"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  {
+                    "current_key": "AIzaSyDG_AtN8t3NaBIOGhJxgiTvQrf0AaxvMWg"
+                  }
+                ],
+                "services": {
+                  "appinvite_service": {
+                    "other_platform_oauth_client": []
+                  }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+          fi
+
+          # Decode debug.keystore if base64 file is present and keystore is missing
+          if [ ! -f "debug.keystore" ] && [ -f "debug.keystore.base64" ]; then
+            echo "Decoding debug.keystore..."
+            base64 -d debug.keystore.base64 > debug.keystore || true
+          fi
+
+          # Ensure .env file exists for secrets-gradle-plugin
+          touch .env
+
       - name: Build Android App Bundle (AAB)
         run: gradle :app:bundleRelease --stacktrace
 
