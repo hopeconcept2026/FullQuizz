@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Player profiles & Leaderboard
+    match /players/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Multiplayer Game Rooms
+    match /game_rooms/{roomCode} {
+      allow read: if true;
+      allow create: if true;
+      // Allow update for participants in the room
+      allow update: if true;
+      allow delete: if request.auth != null && resource.data.players[request.auth.uid].isHost == true;
+    }
+
+    // Question Bank
+    match /questions/{questionId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Categories
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if false; // Admin only
+    }
+  }
+}

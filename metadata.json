@@ -1,0 +1,6 @@
+{
+  "name": "FULLQUIZZ",
+  "description": "Application de quiz gratuite, offline-first et gamifiée avec culture générale, Bible, Afrique, RDC et défis quotidiens.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
