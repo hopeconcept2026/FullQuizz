@@ -37,6 +37,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+import org.json.JSONArray
+import org.json.JSONObject
+
 sealed class CurrentScreen {
     object Home : CurrentScreen()
     object QuizPlay : CurrentScreen()
@@ -61,6 +64,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         FirebaseManager.initialize(application)
+        observeBluetoothMessages()
     }
 
     // Bluetooth Local Multiplayer States
@@ -70,12 +74,222 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isBluetoothEnabled = bluetoothService.isBluetoothEnabled
     val lastReceivedBtMessage = bluetoothService.lastReceivedMessage
 
+    // 1v1 Duel Peer-to-Peer State
+    private val _isDuelMode = MutableStateFlow(false)
+    val isDuelMode: StateFlow<Boolean> = _isDuelMode.asStateFlow()
+
+    private val _opponentName = MutableStateFlow("Adversaire")
+    val opponentName: StateFlow<String> = _opponentName.asStateFlow()
+
+    private val _opponentScore = MutableStateFlow(0)
+    val opponentScore: StateFlow<Int> = _opponentScore.asStateFlow()
+
+    private val _opponentQuestionIndex = MutableStateFlow(0)
+    val opponentQuestionIndex: StateFlow<Int> = _opponentQuestionIndex.asStateFlow()
+
+    private val _opponentLastAnswerCorrect = MutableStateFlow<Boolean?>(null)
+    val opponentLastAnswerCorrect: StateFlow<Boolean?> = _opponentLastAnswerCorrect.asStateFlow()
+
+    private val _opponentFinished = MutableStateFlow(false)
+    val opponentFinished: StateFlow<Boolean> = _opponentFinished.asStateFlow()
+
+    private val _duelWinnerMessage = MutableStateFlow<String?>(null)
+    val duelWinnerMessage: StateFlow<String?> = _duelWinnerMessage.asStateFlow()
+
     fun startBluetoothDiscovery() = bluetoothService.startDiscovery()
     fun stopBluetoothDiscovery() = bluetoothService.stopDiscovery()
     fun startBluetoothHosting() = bluetoothService.startHosting()
     fun connectToBluetoothDevice(address: String) = bluetoothService.connectToDevice(address)
-    fun disconnectBluetooth() = bluetoothService.disconnect()
+    fun disconnectBluetooth() {
+        bluetoothService.disconnect()
+        _isDuelMode.value = false
+    }
     fun sendBluetoothMessage(msg: String) = bluetoothService.sendMessage(msg)
+
+    private fun observeBluetoothMessages() {
+        viewModelScope.launch {
+            bluetoothService.lastReceivedMessage.collect { rawMsg ->
+                if (!rawMsg.isNullOrBlank()) {
+                    handleIncomingBluetoothMessage(rawMsg)
+                }
+            }
+        }
+    }
+
+    private fun handleIncomingBluetoothMessage(rawMsg: String) {
+        try {
+            val json = JSONObject(rawMsg)
+            when (json.optString("action")) {
+                "START_DUEL" -> {
+                    val catTitle = json.optString("categoryTitle", "Duel 1v1 Bluetooth")
+                    val hostName = json.optString("hostNickname", "Hôte")
+                    val questionsArray = json.optJSONArray("questions") ?: return
+                    val list = mutableListOf<QuestionEntity>()
+                    for (i in 0 until questionsArray.length()) {
+                        val qObj = questionsArray.getJSONObject(i)
+                        list.add(jsonToQuestion(qObj))
+                    }
+                    if (list.isNotEmpty()) {
+                        startDuelAsClient(list, catTitle, hostName)
+                    }
+                }
+                "PROGRESS" -> {
+                    val score = json.optInt("score", 0)
+                    val qIndex = json.optInt("qIndex", 0)
+                    val isCorrect = json.optBoolean("isCorrect", false)
+                    val isFinished = json.optBoolean("isFinished", false)
+                    _opponentScore.value = score
+                    _opponentQuestionIndex.value = qIndex
+                    _opponentLastAnswerCorrect.value = isCorrect
+                    _opponentFinished.value = isFinished
+
+                    if (isFinished && _currentScreen.value is CurrentScreen.QuizResult) {
+                        computeDuelWinner()
+                    }
+                }
+                "REMATCH_REQUEST" -> {
+                    startBluetoothDuel()
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MainViewModel", "Error parsing BT message: ${e.message}")
+        }
+    }
+
+    fun startBluetoothDuel(categoryId: String = "all") {
+        viewModelScope.launch {
+            val connectedDevice = (bluetoothService.connectionState.value as? com.example.core.bluetooth.BluetoothConnectionState.Connected)?.device
+            val oppName = connectedDevice?.name ?: "Adversaire"
+            _opponentName.value = oppName
+            _opponentScore.value = 0
+            _opponentQuestionIndex.value = 0
+            _opponentFinished.value = false
+            _opponentLastAnswerCorrect.value = null
+            _duelWinnerMessage.value = null
+
+            val count = 10
+            val loadedQuestions = repository.getQuestionsForQuiz(categoryId, "DUEL", count)
+            if (loadedQuestions.isEmpty()) return@launch
+
+            val jsonArray = JSONArray()
+            for (q in loadedQuestions) {
+                jsonArray.put(questionToJson(q))
+            }
+
+            val payload = JSONObject().apply {
+                put("action", "START_DUEL")
+                put("categoryTitle", "Duel 1v1 Bluetooth")
+                put("hostNickname", playerProfile.value?.nickname ?: "Joueur 1")
+                put("questions", jsonArray)
+            }
+
+            bluetoothService.sendMessage(payload.toString())
+
+            // Initialize host local game
+            _isDuelMode.value = true
+            _activeCategoryId.value = categoryId
+            _activeMode.value = "DUEL"
+            _activeCategoryTitle.value = "Duel 1v1 Bluetooth"
+            _activeQuestions.value = loadedQuestions
+            _currentQuestionIndex.value = 0
+            _currentScore.value = 0
+            _currentCombo.value = 0
+            _bestComboInSession.value = 0
+            _selectedOption.value = null
+            _isAnswerConfirmed.value = false
+            _eliminatedOptionIndices.value = emptySet()
+            _hasWatchedDoubleAd.value = false
+            questionResultsMap.clear()
+
+            _currentScreen.value = CurrentScreen.QuizPlay
+            GameShowAudioEngine.playBgm(com.example.core.audio.BgmTrackType.QUIZ_PLATEAU_SUSPENSE)
+            startQuestionTimer()
+        }
+    }
+
+    private fun startDuelAsClient(questions: List<QuestionEntity>, categoryTitle: String, hostName: String) {
+        _isDuelMode.value = true
+        _opponentName.value = hostName
+        _opponentScore.value = 0
+        _opponentQuestionIndex.value = 0
+        _opponentFinished.value = false
+        _opponentLastAnswerCorrect.value = null
+        _duelWinnerMessage.value = null
+
+        _activeCategoryId.value = "all"
+        _activeMode.value = "DUEL"
+        _activeCategoryTitle.value = categoryTitle
+        _activeQuestions.value = questions
+        _currentQuestionIndex.value = 0
+        _currentScore.value = 0
+        _currentCombo.value = 0
+        _bestComboInSession.value = 0
+        _selectedOption.value = null
+        _isAnswerConfirmed.value = false
+        _eliminatedOptionIndices.value = emptySet()
+        _hasWatchedDoubleAd.value = false
+        questionResultsMap.clear()
+
+        _currentScreen.value = CurrentScreen.QuizPlay
+        GameShowAudioEngine.playBgm(com.example.core.audio.BgmTrackType.QUIZ_PLATEAU_SUSPENSE)
+        startQuestionTimer()
+    }
+
+    fun requestDuelRematch() {
+        if (_isDuelMode.value) {
+            val isHost = (bluetoothService.connectionState.value as? com.example.core.bluetooth.BluetoothConnectionState.Connected)?.isHost == true
+            if (isHost) {
+                startBluetoothDuel()
+            } else {
+                val rematchPayload = JSONObject().apply {
+                    put("action", "REMATCH_REQUEST")
+                }
+                bluetoothService.sendMessage(rematchPayload.toString())
+            }
+        }
+    }
+
+    private fun computeDuelWinner() {
+        val myScore = _currentScore.value
+        val oppScore = _opponentScore.value
+        _duelWinnerMessage.value = when {
+            myScore > oppScore -> "Victoire écrasante en Duel 1v1 !"
+            myScore < oppScore -> "Défaite en Duel... Revanche ?"
+            else -> "Égalité parfaite en Duel 1v1 !"
+        }
+    }
+
+    private fun questionToJson(q: QuestionEntity): JSONObject {
+        return JSONObject().apply {
+            put("id", q.id)
+            put("catId", q.categoryId)
+            put("subcat", q.subcategory)
+            put("question", q.question)
+            put("optA", q.optionA)
+            put("optB", q.optionB)
+            put("optC", q.optionC)
+            put("optD", q.optionD)
+            put("correct", q.correctAnswer)
+            put("explanation", q.explanation)
+            put("diff", q.difficulty)
+        }
+    }
+
+    private fun jsonToQuestion(json: JSONObject): QuestionEntity {
+        return QuestionEntity(
+            id = json.optLong("id", 0L),
+            categoryId = json.optString("catId", "all"),
+            subcategory = json.optString("subcat", "Général"),
+            question = json.optString("question", ""),
+            optionA = json.optString("optA", ""),
+            optionB = json.optString("optB", ""),
+            optionC = json.optString("optC", ""),
+            optionD = json.optString("optD", ""),
+            correctAnswer = json.optString("correct", "A"),
+            explanation = json.optString("explanation", ""),
+            difficulty = json.optString("diff", "medium")
+        )
+    }
 
     // Firebase Auth & Cloud States
     val currentFirebaseUser: StateFlow<FirebaseUser?> = FirebaseManager.currentUser
@@ -221,6 +435,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
+            _isDuelMode.value = false
             _activeCategoryId.value = categoryId
             _activeMode.value = mode
 
@@ -300,6 +515,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _currentCombo.value = 0
             GameShowAudioEngine.playWrongAnswer()
         }
+
+        if (_isDuelMode.value) {
+            try {
+                val progressPayload = JSONObject().apply {
+                    put("action", "PROGRESS")
+                    put("score", _currentScore.value)
+                    put("qIndex", _currentQuestionIndex.value + 1)
+                    put("isCorrect", isCorrect)
+                    put("combo", _currentCombo.value)
+                    put("isFinished", false)
+                }
+                bluetoothService.sendMessage(progressPayload.toString())
+            } catch (e: Exception) {
+                android.util.Log.w("MainViewModel", "Error sending progress: ${e.message}")
+            }
+        }
     }
 
     fun nextQuestion() {
@@ -318,6 +549,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun finishQuizSession() {
         GameShowAudioEngine.stopTension()
         GameShowAudioEngine.playVictoryFanfare()
+        
+        if (_isDuelMode.value) {
+            try {
+                val finishPayload = JSONObject().apply {
+                    put("action", "PROGRESS")
+                    put("score", _currentScore.value)
+                    put("qIndex", _activeQuestions.value.size)
+                    put("isCorrect", true)
+                    put("combo", _bestComboInSession.value)
+                    put("isFinished", true)
+                }
+                bluetoothService.sendMessage(finishPayload.toString())
+            } catch (e: Exception) {
+                android.util.Log.w("MainViewModel", "Error sending finish BT progress: ${e.message}")
+            }
+            computeDuelWinner()
+        }
+
         viewModelScope.launch {
             val result = repository.submitQuiz(
                 categoryId = _activeCategoryId.value,

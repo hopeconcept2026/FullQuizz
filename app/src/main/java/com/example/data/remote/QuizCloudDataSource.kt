@@ -301,7 +301,7 @@ class QuizCloudDataSource(
     }
 
     /**
-     * Online Multiplayer: Joins an existing Match Room by code or simulates quick matchmaking.
+     * Online Multiplayer: Joins an existing Match Room by code or creates a real waiting room.
      */
     suspend fun joinMultiplayerRoom(
         roomCode: String,
@@ -310,8 +310,8 @@ class QuizCloudDataSource(
         playerLevel: Int
     ): OnlineMatchRoom = withContext(Dispatchers.IO) {
         _isSyncingCloud.value = true
-        _syncMessage.value = "Recherche d'un adversaire en ligne pour $roomCode..."
-        delay(800) // Matchmaking delay
+        val targetCode = roomCode.ifBlank { "QZ-" + (1000..9999).random() }
+        _syncMessage.value = "Création du salon $targetCode en attente d'un adversaire..."
 
         val current = _activeRoom.value
         val questions = if (current != null && current.questions.isNotEmpty()) {
@@ -320,11 +320,8 @@ class QuizCloudDataSource(
             questionDao.getRandomQuestionsAll(5)
         }
 
-        val opponentNames = listOf("Koffi_243", "Amina_Dakar", "Samuel_Yaounde", "Eunice_Kin", "Brel_Brazza", "Grace_Abidjan")
-        val opponentName = opponentNames.random()
-
         val room = OnlineMatchRoom(
-            roomId = roomCode.ifBlank { "QZ-" + (1000..9999).random() },
+            roomId = targetCode,
             categoryId = "all",
             categoryName = "Duel Multijoueur Direct",
             host = OnlinePlayer(
@@ -333,19 +330,13 @@ class QuizCloudDataSource(
                 avatarId = playerAvatar,
                 level = playerLevel
             ),
-            guest = OnlinePlayer(
-                id = UUID.randomUUID().toString(),
-                nickname = opponentName,
-                avatarId = "avatar_${(1..6).random()}",
-                level = (playerLevel - 1..playerLevel + 2).random().coerceAtLeast(1),
-                isReady = true
-            ),
-            status = MatchStatus.OPPONENT_FOUND,
+            guest = null,
+            status = MatchStatus.WAITING_FOR_OPPONENT,
             questions = questions
         )
         _activeRoom.value = room
         _isSyncingCloud.value = false
-        _syncMessage.value = "Adversaire trouvé : $opponentName !"
+        _syncMessage.value = "Salon $targetCode ouvert ! Partagez ce code à un ami pour jouer."
         room
     }
 

@@ -66,16 +66,29 @@ fun QuizResultScreen(
     onGoHome: () -> Unit,
     onWatchDoubleRewardAd: () -> Unit,
     hasWatchedDoubleAd: Boolean,
+    isDuelMode: Boolean = false,
+    opponentName: String = "Adversaire",
+    opponentScore: Int = 0,
+    duelWinnerMessage: String? = null,
+    onDuelRematch: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val percentage = (result.score.toFloat() / result.totalQuestions.toFloat() * 100).toInt()
 
-    val (feedbackTitle, emojiBadge) = when {
-        percentage >= 90 -> "Score Exceptionnel !" to "🏆"
-        percentage >= 70 -> "Bravo, Bien Joué !" to "🌟"
-        percentage >= 50 -> "Bon travail !" to "🎯"
-        else -> "Courage, continue d'apprendre !" to "💪"
+    val (feedbackTitle, emojiBadge) = if (isDuelMode) {
+        when {
+            result.score > opponentScore -> "🏆 Victoire Écrasante !" to "👑"
+            result.score < opponentScore -> "💥 Défaite honorable !" to "⚔️"
+            else -> "🤝 Égalité Parfaite !" to "🔥"
+        }
+    } else {
+        when {
+            percentage >= 90 -> "Score Exceptionnel !" to "🏆"
+            percentage >= 70 -> "Bravo, Bien Joué !" to "🌟"
+            percentage >= 50 -> "Bon travail !" to "🎯"
+            else -> "Courage, continue d'apprendre !" to "💪"
+        }
     }
 
     LazyColumn(
@@ -138,38 +151,91 @@ fun QuizResultScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Score Display
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color.White
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.Bottom
+                    if (isDuelMode) {
+                        // Duel 1v1 Comparison Box
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color.White,
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = "${result.score}",
-                                style = MaterialTheme.typography.displaySmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = CleanMinPrimary
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceEvenly,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // You
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "Vous",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, color = CleanMinPrimary)
+                                    )
+                                    Text(
+                                        text = "${result.score} pts",
+                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold, color = CleanMinPrimary)
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = CleanMinGold.copy(alpha = 0.2f),
+                                    modifier = Modifier.padding(horizontal = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "VS",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold, color = CleanMinGold),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+
+                                // Opponent
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = opponentName.take(10),
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    )
+                                    Text(
+                                        text = "$opponentScore pts",
+                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // Score Display
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = Color.White
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                Text(
+                                    text = "${result.score}",
+                                    style = MaterialTheme.typography.displaySmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = CleanMinPrimary
+                                    )
                                 )
-                            )
-                            Text(
-                                text = " / ${result.totalQuestions}",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                ),
-                                modifier = Modifier.padding(bottom = 4.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "($percentage%)",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (percentage >= 50) CleanMinGreen else CleanMinPrimary
-                                ),
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            )
+                                Text(
+                                    text = " / ${result.totalQuestions}",
+                                    style = MaterialTheme.typography.titleLarge.copy(
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    ),
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "($percentage%)",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (percentage >= 50) CleanMinGreen else CleanMinPrimary
+                                    ),
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -382,7 +448,13 @@ fun QuizResultScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Button(
-                    onClick = onReplay,
+                    onClick = {
+                        if (isDuelMode && onDuelRematch != null) {
+                            onDuelRematch()
+                        } else {
+                            onReplay()
+                        }
+                    },
                     shape = RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = CleanMinPrimary),
                     modifier = Modifier
@@ -397,7 +469,7 @@ fun QuizResultScreen(
                         Icon(imageVector = Icons.Default.Replay, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "REJOUER CE QUIZ",
+                            text = if (isDuelMode) "REVANCHE EN DUEL ⚔️" else "REJOUER CE QUIZ",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
                     }

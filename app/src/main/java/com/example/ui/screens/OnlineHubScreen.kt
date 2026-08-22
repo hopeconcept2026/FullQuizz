@@ -328,10 +328,10 @@ private fun OnlineMultiplayerTab(
                                 )
                             )
                             Text(
-                                text = "Prêt à jouer",
+                                text = if (activeRoom.guest != null) "Adversaire connecté" else "En attente d'un joueur",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     fontWeight = FontWeight.Bold,
-                                    color = CleanMinGreen
+                                    color = if (activeRoom.guest != null) CleanMinGreen else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             )
                         }
@@ -359,11 +359,14 @@ private fun OnlineMultiplayerTab(
                             )
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = activeRoom.guest?.nickname ?: "En attente...",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                                    text = activeRoom.guest?.nickname ?: "En attente d'un ami...",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (activeRoom.guest != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 )
                                 Text(
-                                    text = "Niv. ${activeRoom.guest?.level ?: 1}",
+                                    text = if (activeRoom.guest != null) "Niv. ${activeRoom.guest?.level ?: 1}" else "Donnez le code ${activeRoom.roomId}",
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -371,13 +374,30 @@ private fun OnlineMultiplayerTab(
 
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        Button(
-                            onClick = { onStartOnlineDuel("all") },
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = CleanMinGreen),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(text = "Entrer dans l'Arène de Duel", fontWeight = FontWeight.Bold)
+                        if (activeRoom.guest != null) {
+                            Button(
+                                onClick = { onStartOnlineDuel("all") },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = CleanMinGreen),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(text = "Lancer le Duel en Ligne ⚔️", fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = "Invitez un autre joueur à ouvrir l'appli et entrer le code ${activeRoom.roomId} ci-dessous !",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Medium
+                                    ),
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
                         }
                     }
                 }

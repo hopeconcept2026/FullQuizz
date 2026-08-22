@@ -102,6 +102,12 @@ fun QuizPlayScreen(
     onWatchAdForHint: (() -> Unit)? = null,
     isMusicEnabled: Boolean = true,
     onToggleMusic: () -> Unit = {},
+    isDuelMode: Boolean = false,
+    opponentName: String = "Adversaire",
+    opponentScore: Int = 0,
+    opponentQuestionIndex: Int = 0,
+    opponentFinished: Boolean = false,
+    opponentLastAnswerCorrect: Boolean? = null,
     modifier: Modifier = Modifier
 ) {
     var showReportDialog by remember { mutableStateOf(false) }
@@ -231,6 +237,103 @@ fun QuizPlayScreen(
             color = CleanMinPrimary,
             trackColor = CleanMinOutlineVariant
         )
+
+        // Live 1v1 Duel VS Scoreboard (when in duel mode)
+        if (isDuelMode) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, CleanMinOutlineVariant, RoundedCornerShape(16.dp))
+                    .testTag("duel_vs_scoreboard")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Player side
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = CleanMinPrimary.copy(alpha = 0.15f),
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "Moi",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, color = CleanMinPrimary)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Vous",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = "$currentScore pts • Q${currentIndex + 1}/${questions.size}",
+                                style = MaterialTheme.typography.labelSmall.copy(color = CleanMinPrimary, fontWeight = FontWeight.SemiBold)
+                            )
+                        }
+                    }
+
+                    // VS Badge
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = CleanMinGold.copy(alpha = 0.2f),
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    ) {
+                        Text(
+                            text = "⚔️ VS",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.ExtraBold, color = CleanMinGold),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    // Opponent side
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(
+                                text = opponentName.take(10),
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                            val oppStatus = when {
+                                opponentFinished -> "Terminé !"
+                                opponentLastAnswerCorrect == true -> "$opponentScore pts • Q$opponentQuestionIndex 🟢"
+                                opponentLastAnswerCorrect == false -> "$opponentScore pts • Q$opponentQuestionIndex 🔴"
+                                else -> "$opponentScore pts • Q$opponentQuestionIndex"
+                            }
+                            Text(
+                                text = oppStatus,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = if (opponentFinished) CleanMinGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = opponentName.firstOrNull()?.uppercase() ?: "A",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 

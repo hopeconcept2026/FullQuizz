@@ -168,6 +168,15 @@ fun FullQuizzApp(viewModel: MainViewModel) {
     val isBluetoothEnabled by viewModel.isBluetoothEnabled.collectAsState()
     val lastReceivedBtMessage by viewModel.lastReceivedBtMessage.collectAsState()
 
+    // 1v1 Duel States
+    val isDuelMode by viewModel.isDuelMode.collectAsState()
+    val opponentName by viewModel.opponentName.collectAsState()
+    val opponentScore by viewModel.opponentScore.collectAsState()
+    val opponentQuestionIndex by viewModel.opponentQuestionIndex.collectAsState()
+    val opponentLastAnswerCorrect by viewModel.opponentLastAnswerCorrect.collectAsState()
+    val opponentFinished by viewModel.opponentFinished.collectAsState()
+    val duelWinnerMessage by viewModel.duelWinnerMessage.collectAsState()
+
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
@@ -225,7 +234,7 @@ fun FullQuizzApp(viewModel: MainViewModel) {
                         onConnectToDevice = { viewModel.connectToBluetoothDevice(it) },
                         onDisconnect = { viewModel.disconnectBluetooth() },
                         onSendMessage = { viewModel.sendBluetoothMessage(it) },
-                        onStartGame = { viewModel.startQuiz("all", "DUEL") }
+                        onStartGame = { viewModel.startBluetoothDuel("all") }
                     )
                 }
 
@@ -269,7 +278,13 @@ fun FullQuizzApp(viewModel: MainViewModel) {
                         onReportQuestion = { reason, comment -> viewModel.reportQuestion(reason, comment) },
                         onQuitQuiz = { viewModel.navigateTo(CurrentScreen.Home) },
                         isMusicEnabled = isMusicEnabled,
-                        onToggleMusic = { viewModel.toggleMusic() }
+                        onToggleMusic = { viewModel.toggleMusic() },
+                        isDuelMode = isDuelMode,
+                        opponentName = opponentName,
+                        opponentScore = opponentScore,
+                        opponentQuestionIndex = opponentQuestionIndex,
+                        opponentFinished = opponentFinished,
+                        opponentLastAnswerCorrect = opponentLastAnswerCorrect
                     )
                 }
 
@@ -287,7 +302,12 @@ fun FullQuizzApp(viewModel: MainViewModel) {
                                 } ?: viewModel.navigateTo(CurrentScreen.Home)
                             },
                             onWatchDoubleRewardAd = { viewModel.watchDoubleRewardAd(activity) },
-                            hasWatchedDoubleAd = hasWatchedDoubleAd
+                            hasWatchedDoubleAd = hasWatchedDoubleAd,
+                            isDuelMode = isDuelMode,
+                            opponentName = opponentName,
+                            opponentScore = opponentScore,
+                            duelWinnerMessage = duelWinnerMessage,
+                            onDuelRematch = { viewModel.requestDuelRematch() }
                         )
                     }
                 }
