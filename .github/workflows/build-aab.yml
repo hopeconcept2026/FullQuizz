@@ -65,15 +65,19 @@ jobs:
           EOF
           fi
 
-          # Ensure release keystore exists or create a valid one with keytool
-          if [ ! -f "my-upload-key.jks" ] && [ ! -f "debug.keystore" ]; then
-            if [ -f "debug.keystore.base64" ]; then
-              base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
-            fi
+          # If RELEASE_KEYSTORE_BASE64 is provided in GitHub Secrets, decode it to my-upload-key.jks
+          if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo "Decoding release keystore from GitHub Secrets..."
+            echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > my-upload-key.jks
+          elif [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "Decoding release keystore from KEYSTORE_BASE64..."
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > my-upload-key.jks
+          elif [ -f "debug.keystore.base64" ]; then
+            base64 -d debug.keystore.base64 > debug.keystore 2>/dev/null || true
           fi
 
-          if [ ! -f "debug.keystore" ]; then
-            echo "Generating signing keystore for release build..."
+          if [ ! -f "my-upload-key.jks" ] && [ ! -f "debug.keystore" ]; then
+            echo "Generating signing keystore for build..."
             keytool -genkey -v -keystore debug.keystore -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=FullQuizz, OU=HopeConcept, O=HopeConcept, L=Paris, S=IDF, C=FR"
           fi
 
@@ -81,9 +85,17 @@ jobs:
           touch .env
 
       - name: Build Android App Bundle (AAB)
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: gradle :app:bundleRelease --stacktrace
 
       - name: Build Universal Release APK (Optional)
+        env:
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
         run: gradle :app:assembleRelease --stacktrace || true
 
       - name: Upload AAB Bundle Artifact
